@@ -35,7 +35,7 @@ class scribeHandler : virtual public scribe::thrift::scribeIf,
                               public facebook::fb303::FacebookBase {
 
  public:
-  scribeHandler(unsigned long int port, const std::string& conf_file);
+  scribeHandler(unsigned long int port, const std::string& conf_file, bool daemon);
   ~scribeHandler();
 
   void shutdown();
@@ -93,6 +93,7 @@ class scribeHandler : virtual public scribe::thrift::scribeIf,
   scribeHandler(const scribeHandler& rhs);
   const scribeHandler& operator=(const scribeHandler& rhs);
 
+  void asDaemon();
  protected:
   bool throttleDeny(int num_messages); // returns true if overloaded
   void deleteCategoryMap(category_map_t *pcats);

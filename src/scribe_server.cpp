@@ -44,7 +44,7 @@ shared_ptr<scribeHandler> g_Handler;
 #define DEFAULT_SERVER_THREADS     3
 
 void print_usage(const char* program_name) {
-  cout << "Usage: " << program_name << " [-p port] [-c config_file]" << endl;
+  cout << "Usage: " << program_name << " [-p port] [-c config_file] [-d]" << endl;
 }
 
 int main(int argc, char **argv) {
@@ -57,16 +57,18 @@ int main(int argc, char **argv) {
     }
 
     int next_option;
-    const char* const short_options = "hp:c:";
+    const char* const short_options = "hp:c:d";
     const struct option long_options[] = {
       { "help",   0, NULL, 'h' },
       { "port",   0, NULL, 'p' },
       { "config", 0, NULL, 'c' },
+      { "daemon", 0, NULL, 'd' },
       { NULL,     0, NULL, 'o' },
     };
 
     unsigned long int port = 0;  // this can also be specified in the conf file, which overrides the command line
     std::string config_file;
+    bool daemon = false;
     while (0 < (next_option = getopt_long(argc, argv, short_options, long_options, NULL))) {
       switch (next_option) {
       default:
@@ -79,6 +81,9 @@ int main(int argc, char **argv) {
       case 'p':
         port = strtoul(optarg, NULL, 0);
         break;
+      case 'd':
+        daemon = true;
+        break;
       }
     }
 
@@ -90,7 +95,7 @@ int main(int argc, char **argv) {
     // seed random number generation with something reasonably unique
     srand(time(NULL) ^ getpid());
 
-    g_Handler = shared_ptr<scribeHandler>(new scribeHandler(port, config_file));
+    g_Handler = shared_ptr<scribeHandler>(new scribeHandler(port, config_file, daemon));
     g_Handler->initialize();
 
     shared_ptr<TProcessor> processor(new scribeProcessor(g_Handler));
@@ -125,7 +130,8 @@ int main(int argc, char **argv) {
   return 0;
 }
 
-scribeHandler::scribeHandler(unsigned long int server_port, const std::string& config_file)
+scribeHandler::scribeHandler(unsigned long int server_port,
+  const std::string& config_file, bool daemon)
   : FacebookBase("Scribe"),
     port(server_port),
     numThriftServerThreads(DEFAULT_SERVER_THREADS),
@@ -140,6 +146,9 @@ scribeHandler::scribeHandler(unsigned long int server_port, const std::string& c
     maxQueueSize(DEFAULT_MAX_QUEUE_SIZE),
     newThreadPerCategory(true) {
   time(&lastMsgTime);
+  if (daemon) {
+    asDaemon();
+  }
 }
 
 scribeHandler::~scribeHandler() {
@@ -915,4 +924,37 @@ void scribeHandler::deleteCategoryMap(category_map_t *pcats) {
   } // for each category
   pcats->clear();
   delete pcats;
+}
+
+// lowlevel demonization
+void scribeHandler::asDaemon() {
+  struct sigaction osa, sa;
+  int fd;
+  pid_t newgrp;
+  int oerrno;
+  int osa_ok;
+
+  sigemptyset(&sa.sa_mask);
+  sa.sa_handler = SIG_IGN;
+  sa.sa_flags = 0;
+  osa_ok = sigaction(SIGHUP, &sa, &osa);
+
+  switch (fork()) {
+  case -1 :
+    throw std::runtime_error("fork() error");
+  case 0:
+    break;
+  default:
+    _exit(0);
+  }
+
+  newgrp = setsid();
+  oerrno = errno;
+  if (osa_ok != -1) {
+    sigaction(SIGHUP, &osa, NULL);
+  }
+
+  if (newgrp == -1) {
+    throw std::runtime_error("setsid() error");
+  }
 }
