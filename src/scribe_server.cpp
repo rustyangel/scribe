@@ -44,30 +44,26 @@ shared_ptr<scribeHandler> g_Handler;
 #define DEFAULT_SERVER_THREADS     3
 
 void print_usage(const char* program_name) {
-  cout << "Usage: " << program_name << " [-p port] [-c config_file] [-d]" << endl;
+  cout << "Usage: " << program_name << " [-p port] [-c config_file] [-d] [-l log_file]" << endl;
 }
 
 int main(int argc, char **argv) {
 
   try {
-    /* Increase number of fds */
-    struct rlimit r_fd = {65535,65535};
-    if (-1 == setrlimit(RLIMIT_NOFILE, &r_fd)) {
-      LOG_OPER("setrlimit error (setting max fd size)");
-    }
-
     int next_option;
-    const char* const short_options = "hp:c:d";
+    const char* const short_options = "hp:c:dl:";
     const struct option long_options[] = {
       { "help",   0, NULL, 'h' },
       { "port",   0, NULL, 'p' },
       { "config", 0, NULL, 'c' },
       { "daemon", 0, NULL, 'd' },
+      { "log",    0, NULL, 'l' },
       { NULL,     0, NULL, 'o' },
     };
 
     unsigned long int port = 0;  // this can also be specified in the conf file, which overrides the command line
     std::string config_file;
+    std::string log_file;
     bool daemon = false;
     while (0 < (next_option = getopt_long(argc, argv, short_options, long_options, NULL))) {
       switch (next_option) {
@@ -84,7 +80,26 @@ int main(int argc, char **argv) {
       case 'd':
         daemon = true;
         break;
+      case 'l':
+        log_file = optarg;
+        break;
       }
+    }
+
+    if (!log_file.empty()) {
+      int fd = open(log_file.c_str(), O_WRONLY|O_CREAT);
+      if (fd == -1) {
+        throw std::runtime_error("can't open log file");
+      }
+
+      dup2(fd, STDERR_FILENO);
+      close(fd);
+    }
+
+    /* Increase number of fds */
+    struct rlimit r_fd = {65535,65535};
+    if (-1 == setrlimit(RLIMIT_NOFILE, &r_fd)) {
+      LOG_OPER("setrlimit error (setting max fd size)");
     }
 
     // assume a non-option arg is a config file name
@@ -929,7 +944,6 @@ void scribeHandler::deleteCategoryMap(category_map_t *pcats) {
 // lowlevel demonization
 void scribeHandler::asDaemon() {
   struct sigaction osa, sa;
-  int fd;
   pid_t newgrp;
   int oerrno;
   int osa_ok;
