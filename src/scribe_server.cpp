@@ -44,26 +44,28 @@ shared_ptr<scribeHandler> g_Handler;
 #define DEFAULT_SERVER_THREADS     3
 
 void print_usage(const char* program_name) {
-  cout << "Usage: " << program_name << " [-p port] [-c config_file] [-d] [-l log_file]" << endl;
+  cout << "Usage: " << program_name << " [-p port] [-c config_file] [-d] [-l log_file] [-P pid_file]" << endl;
 }
 
 int main(int argc, char **argv) {
 
   try {
     int next_option;
-    const char* const short_options = "hp:c:dl:";
+    const char* const short_options = "hp:c:dl:P:";
     const struct option long_options[] = {
       { "help",   0, NULL, 'h' },
       { "port",   0, NULL, 'p' },
       { "config", 0, NULL, 'c' },
       { "daemon", 0, NULL, 'd' },
       { "log",    0, NULL, 'l' },
+      { "pid",    0, NULL, 'P' },
       { NULL,     0, NULL, 'o' },
     };
 
     unsigned long int port = 0;  // this can also be specified in the conf file, which overrides the command line
     std::string config_file;
     std::string log_file;
+    std::string pid_file;
     bool daemon = false;
     while (0 < (next_option = getopt_long(argc, argv, short_options, long_options, NULL))) {
       switch (next_option) {
@@ -82,6 +84,9 @@ int main(int argc, char **argv) {
         break;
       case 'l':
         log_file = optarg;
+        break;
+      case 'P':
+        pid_file = optarg;
         break;
       }
     }
@@ -110,7 +115,7 @@ int main(int argc, char **argv) {
     // seed random number generation with something reasonably unique
     srand(time(NULL) ^ getpid());
 
-    g_Handler = shared_ptr<scribeHandler>(new scribeHandler(port, config_file, daemon));
+    g_Handler = shared_ptr<scribeHandler>(new scribeHandler(port, config_file, daemon, pid_file));
     g_Handler->initialize();
 
     shared_ptr<TProcessor> processor(new scribeProcessor(g_Handler));
@@ -146,7 +151,7 @@ int main(int argc, char **argv) {
 }
 
 scribeHandler::scribeHandler(unsigned long int server_port,
-  const std::string& config_file, bool daemon)
+  const std::string& config_file, bool daemon, const std::string& pid_file)
   : FacebookBase("Scribe"),
     port(server_port),
     numThriftServerThreads(DEFAULT_SERVER_THREADS),
@@ -154,6 +159,7 @@ scribeHandler::scribeHandler(unsigned long int server_port,
     pcategories(NULL),
     pcategory_prefixes(NULL),
     configFilename(config_file),
+    pidFilename(pid_file),
     status(STARTING),
     statusDetails("initial state"),
     numMsgLastSecond(0),
@@ -947,18 +953,22 @@ void scribeHandler::asDaemon() {
   pid_t newgrp;
   int oerrno;
   int osa_ok;
+  int pid;
 
   sigemptyset(&sa.sa_mask);
   sa.sa_handler = SIG_IGN;
   sa.sa_flags = 0;
   osa_ok = sigaction(SIGHUP, &sa, &osa);
 
-  switch (fork()) {
+  pid = fork();
+
+  switch (pid) {
   case -1 :
     throw std::runtime_error("fork() error");
   case 0:
     break;
   default:
+    updatePidFile(pid);
     _exit(0);
   }
 
@@ -971,4 +981,22 @@ void scribeHandler::asDaemon() {
   if (newgrp == -1) {
     throw std::runtime_error("setsid() error");
   }
+}
+
+void scribeHandler::updatePidFile(int pid)
+{
+  string filename;
+
+  if (pidFilename.empty()) {
+    filename = DEFAULT_PID_FILE_LOCATION;
+  } else {
+    filename = pidFilename;
+  }
+
+  std::ofstream pid_file(filename.c_str(), std::ios_base::trunc);
+  if (!pid_file.good()) {
+    LOG_OPER("Can't open file %s", filename.c_str());
+  }
+
+  pid_file << pid;
 }

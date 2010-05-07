@@ -21,6 +21,7 @@
 #define SCRIBE_ENV
 
 #define DEFAULT_CONF_FILE_LOCATION "/usr/local/scribe/scribe.conf"
+#define DEFAULT_PID_FILE_LOCATION  "/usr/local/scribe/scribe.pid"
 
 /*
  * This file contains methods for handling tasks that depend

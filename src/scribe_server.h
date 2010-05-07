@@ -35,7 +35,7 @@ class scribeHandler : virtual public scribe::thrift::scribeIf,
                               public facebook::fb303::FacebookBase {
 
  public:
-  scribeHandler(unsigned long int port, const std::string& conf_file, bool daemon);
+  scribeHandler(unsigned long int port, const std::string& conf_file, bool daemon, const std::string& pid_file);
   ~scribeHandler();
 
   void shutdown();
@@ -73,6 +73,7 @@ class scribeHandler : virtual public scribe::thrift::scribeIf,
   boost::shared_ptr<StoreQueue> tmpDefault;
 
   std::string configFilename;
+  std::string pidFilename;
   facebook::fb303::fb_status status;
   std::string statusDetails;
   apache::thrift::concurrency::Mutex statusLock;
@@ -94,6 +95,7 @@ class scribeHandler : virtual public scribe::thrift::scribeIf,
   const scribeHandler& operator=(const scribeHandler& rhs);
 
   void asDaemon();
+  void updatePidFile(int pid);
  protected:
   bool throttleDeny(int num_messages); // returns true if overloaded
   void deleteCategoryMap(category_map_t *pcats);
