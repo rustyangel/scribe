@@ -92,7 +92,7 @@ int main(int argc, char **argv) {
     }
 
     if (!log_file.empty()) {
-      int fd = open(log_file.c_str(), O_WRONLY|O_CREAT);
+      int fd = open(log_file.c_str(), O_WRONLY|O_CREAT|O_APPEND);
       if (fd == -1) {
         throw std::runtime_error("can't open log file");
       }
